@@ -1,19 +1,24 @@
 import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
+import { ApiGatewayToLambda } from 'tr-cdk-lib/aws-apigateway-lambda/lib';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigw from "aws-cdk-lib/aws-apigateway";
 
 export class AwsApigatewayLambdaStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const queue = new sqs.Queue(this, 'AwsApigatewayLambdaQueue', {
-      visibilityTimeout: Duration.seconds(300)
+    new ApiGatewayToLambda(this, 'ApiGatewayToLambdaPattern', {
+      lambdaFunctionProps: {
+        runtime: lambda.Runtime.PYTHON_3_9,
+        code: lambda.Code.fromAsset('lambda'),
+        handler: 'hello.handler',
+      },
+      apiGatewayProps: {
+        defaultMethodOptions: {
+          authorizationType: apigw.AuthorizationType.NONE,
+        }
+      },
     });
-
-    const topic = new sns.Topic(this, 'AwsApigatewayLambdaTopic');
-
-    topic.addSubscription(new subs.SqsSubscription(queue));
   }
 }
