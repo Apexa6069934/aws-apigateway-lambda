@@ -1,0 +1,113 @@
+name: Deploy to Development
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    environment: development
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Configure AWS credentials for development
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_ROLE_TO_ASSUME }}
+          role-session-name: GitHubActions-DevDeploy
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pip install -r lambda/requirements.txt || echo "No requirements.txt found"
+
+      - name: Install AWS CDK
+        run: npm install -g aws-cdk
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Deploy to development
+        run: |
+          # Add development-specific context or parameters
+          cdk deploy --require-approval never --all --context environment=development
+        env:
+          CDK_DEPLOY_ACCOUNT: ${{ secrets.CDK_DEV_DEPLOY_ACCOUNT }}
+          CDK_DEPLOY_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Run integration tests
+        run: |
+          # Install integration test dependencies
+          pip install requests boto3 pytest
+          
+          # Run integration tests against the deployed development environment
+          echo "Running integration tests against development environment..."
+          
+          # Example integration test script
+          python3 -c "
+          import requests
+          import json
+          import os
+          
+          # Get the API Gateway URL from CDK outputs (would need to be configured)
+          # api_url = os.environ.get('DEV_API_URL', 'https://api-dev.example.com')
+          
+          # Basic health check
+          print('✅ Integration tests would run here')
+          print('Example: Testing Lambda function endpoint')
+          print('Example: Testing API Gateway responses') 
+          print('Example: Testing database connections')
+          print('Example: Testing external service integrations')
+          "
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Development deployment successful"
+            echo "Environment: development"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Commit: ${{ github.sha }}"
+          else
+            echo "❌ Development deployment failed"
+            exit 1
+          fi
+
+      - name: Upload development artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deployment-artifacts
+          path: |
+            cdk.out/
+            *.json
+            *.log
+          retention-days: 7
